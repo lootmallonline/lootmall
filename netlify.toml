@@ -1,0 +1,11 @@
+# Netlify detects Next.js automatically and installs its official runtime.
+# No "publish" folder is needed.
+[build]
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # These three values are public by design (they are visible in any website's code),
+  # so Netlify's secret scanner must not block the build because of them.
+  # The service-role key is NOT listed here, so it stays protected by the scanner.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SITE_URL,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY"
