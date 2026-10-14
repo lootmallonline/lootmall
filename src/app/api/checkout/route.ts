@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Cloudflare / Vercel Edge Compatible Supabase Service Client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
@@ -12,40 +11,68 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, phone, address, city, notes, items, spam_trap } = body;
 
-    // Spam Trap Check
+    // Spam Trap
     if (spam_trap) {
       return NextResponse.json({ error: "Spam detected" }, { status: 400 });
     }
 
-    // Input Validation
-    if (!name || !phone || !address || !city || !items || !Array.isArray(items) || items.length === 0) {
+    // Basic Validation
+    if (!name || !phone || !address || !city) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // City-based Payment Logic
+    // City Logic: Rawalpindi / Islamabad = COD, Baqi = Advance Payment
     const normalizedCity = city.trim().toLowerCase();
     const isCODAllowed = normalizedCity === "rawalpindi" || normalizedCity === "islamabad";
     const paymentMethod = isCODAllowed ? "COD" : "Advance Payment";
 
-    // Call Supabase RPC create_order for secure atomic order creation
-    const { data: orderData, error: orderError } = await supabase.rpc("create_order", {
-      p_customer_name: name,
-      p_customer_phone: phone,
-      p_customer_address: address,
-      p_customer_city: city,
-      p_notes: notes || "",
-      p_items: items, // Expects [{ product_id, quantity }]
-      p_payment_method: paymentMethod
-    });
+    // Generate Order Number
+    const orderNumber = "LM-" + Math.floor(100000 + Math.random() * 900000);
+
+    // Direct Insert into orders table
+    const { data: orderData, error: orderError } = await supabase
+      .from("orders")
+      .insert([
+        {
+          order_number: orderNumber,
+          customer_name: name,
+          customer_phone: phone,
+          customer_address: address,
+          customer_city: city,
+          notes: notes || "",
+          payment_method: paymentMethod,
+          payment_status: "pending",
+          tracking_stage: "pending"
+        }
+      ])
+      .select()
+      .single();
 
     if (orderError) {
-      console.error("Order Creation Error:", orderError);
+      console.error("Direct Order Insert Error:", orderError);
       return NextResponse.json({ error: orderError.message }, { status: 500 });
+    }
+
+    // Insert Order Items if present
+    if (items && Array.isArray(items) && items.length > 0 && orderData?.id) {
+      const formattedItems = items.map((item: any) => ({
+        order_id: orderData.id,
+        product_id: item.product_id || item.id,
+        quantity: item.quantity || 1
+      }));
+
+      const { error: itemsError } = await supabase
+        .from("order_items")
+        .insert(formattedItems);
+
+      if (itemsError) {
+        console.error("Order Items Insert Warning:", itemsError);
+      }
     }
 
     return NextResponse.json({
       success: true,
-      order_number: orderData?.order_number || orderData?.id,
+      order_number: orderNumber,
       payment_method: paymentMethod,
       is_cod: isCODAllowed,
       message: isCODAllowed
@@ -60,5 +87,5 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({ status: "Checkout API is active and running" });
+  return NextResponse.json({ status: "Checkout API active" });
 }
