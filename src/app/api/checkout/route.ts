@@ -1,23 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 export async function POST(req: NextRequest) {
   try {
-    // Retrieve environment variables via OpenNext Cloudflare Context with fallback
-    let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    let serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    try {
-      const cfContext = await getCloudflareContext({ async: true });
-      const cfEnv = cfContext?.env as Record<string, string | undefined>;
-      if (cfEnv) {
-        supabaseUrl = supabaseUrl || cfEnv.NEXT_PUBLIC_SUPABASE_URL;
-        serviceKey = serviceKey || cfEnv.SUPABASE_SERVICE_ROLE_KEY;
-      }
-    } catch {
-      // Fallback if executing outside OpenNext runtime context
-    }
+    // Access environment variables securely in Cloudflare/Next.js runtime
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceKey) {
       console.error("Checkout: Supabase environment variables missing");
@@ -40,7 +28,7 @@ export async function POST(req: NextRequest) {
       spam_trap,
     } = body;
 
-    // Spam trap validation
+    // Spam trap check
     if (spam_trap) {
       return NextResponse.json(
         { error: "Invalid request." },
@@ -48,7 +36,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Customer detail validation
+    // Required fields check
     if (
       typeof name !== "string" || !name.trim() ||
       typeof phone !== "string" || !phone.trim() ||
@@ -68,7 +56,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate and combine duplicate product IDs in cart
+    // Validate and combine duplicate product IDs
     const quantities = new Map<string, number>();
 
     for (const item of items) {
@@ -92,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     const productIds = [...quantities.keys()];
 
-    // Lookup products from database
+    // Verify products in Supabase
     const { data: products, error: productError } = await supabase
       .from("products")
       .select(
@@ -175,7 +163,7 @@ export async function POST(req: NextRequest) {
       "LM-" + Date.now().toString().slice(-8) +
       Math.floor(Math.random() * 10);
 
-    // Insert order record
+    // Save order in Supabase
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .insert({
@@ -200,10 +188,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (orderError || !order) {
-      console.error(
-        "Checkout order insert failed:",
-        orderError?.message
-      );
+      console.error("Checkout order insert failed:", orderError?.message);
 
       return NextResponse.json(
         { error: "Unable to save your order. Please try again." },
@@ -222,10 +207,10 @@ export async function POST(req: NextRequest) {
         }))
       );
 
-    // Cleanup incomplete order if items failed to save
     if (itemsError) {
       console.error("Checkout item insert failed:", itemsError.message);
 
+      // Cleanup incomplete order
       const { error: cleanupError } = await supabase
         .from("orders")
         .delete()
