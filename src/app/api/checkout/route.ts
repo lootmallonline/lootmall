@@ -1,66 +1,64 @@
-import { NextResponse } from "next/server";
-import { checkoutSchema } from "@/lib/validation";
-import { createServiceClient } from "@/lib/supabase/admin";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "nodejs";
+// Cloudflare / Vercel Edge Compatible Supabase Service Client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-const FRIENDLY = /(stock|no longer available|cart is empty|invalid quantity)/i;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-export async function POST(req: Request) {
-  let body: unknown;
+export async function POST(req: NextRequest) {
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
-  }
+    const body = await req.json();
+    const { name, phone, address, city, notes, items, spam_trap } = body;
 
-  // Spam trap: bots fill the hidden "website" field, people never see it.
-  if (typeof body === "object" && body !== null && (body as { website?: unknown }).website) {
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
-  }
+    // Spam Trap Check
+    if (spam_trap) {
+      return NextResponse.json({ error: "Spam detected" }, { status: 400 });
+    }
 
-  const parsed = checkoutSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Please check the highlighted fields.", fieldErrors: parsed.error.flatten().fieldErrors },
-      { status: 422 }
-    );
-  }
-  const d = parsed.data;
+    // Input Validation
+    if (!name || !phone || !address || !city || !items || !Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
 
-  try {
-    const supabase = createServiceClient();
-    // The database function reads prices, stock and the delivery charge itself.
-    const { data, error } = await supabase.rpc("create_order", {
-      p_customer_name: d.customer_name,
-      p_phone: d.phone,
-      p_address: d.address,
-      p_city: d.city,
-      p_notes: d.notes,
-      p_items: d.items,
+    // City-based Payment Logic
+    const normalizedCity = city.trim().toLowerCase();
+    const isCODAllowed = normalizedCity === "rawalpindi" || normalizedCity === "islamabad";
+    const paymentMethod = isCODAllowed ? "COD" : "Advance Payment";
+
+    // Call Supabase RPC create_order for secure atomic order creation
+    const { data: orderData, error: orderError } = await supabase.rpc("create_order", {
+      p_customer_name: name,
+      p_customer_phone: phone,
+      p_customer_address: address,
+      p_customer_city: city,
+      p_notes: notes || "",
+      p_items: items, // Expects [{ product_id, quantity }]
+      p_payment_method: paymentMethod
     });
 
-    if (error) {
-      if (FRIENDLY.test(error.message)) {
-        return NextResponse.json({ error: error.message }, { status: 409 });
-      }
-      console.error("create_order failed:", error.message);
-      return NextResponse.json(
-        { error: "We could not place your order. Please try again or contact us on WhatsApp." },
-        { status: 500 }
-      );
+    if (orderError) {
+      console.error("Order Creation Error:", orderError);
+      return NextResponse.json({ error: orderError.message }, { status: 500 });
     }
 
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row?.out_order_number) {
-      return NextResponse.json({ error: "We could not place your order. Please try again." }, { status: 500 });
-    }
-    return NextResponse.json({ order_number: row.out_order_number as string, total: row.out_total as number });
-  } catch (e) {
-    console.error("checkout error:", e);
-    return NextResponse.json(
-      { error: "We could not place your order. Please try again or contact us on WhatsApp." },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: true,
+      order_number: orderData?.order_number || orderData?.id,
+      payment_method: paymentMethod,
+      is_cod: isCODAllowed,
+      message: isCODAllowed
+        ? "Order placed successfully via Cash on Delivery!"
+        : "Order submitted! Please follow advance payment instructions to confirm."
+    });
+
+  } catch (err: any) {
+    console.error("Checkout Exception:", err);
+    return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
   }
+}
+
+export async function GET() {
+  return NextResponse.json({ status: "Checkout API is active and running" });
 }
