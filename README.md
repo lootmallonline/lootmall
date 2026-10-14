@@ -1,158 +1,150 @@
-# LootMall — Online Store (Next.js + Supabase + Netlify)
+# LootMall — Online Store (Next.js + Supabase + Cloudflare Pages)
 
-Ye guide beginner ke liye hai. Har step ko order mein follow karein. Code ya programming aane ki zaroorat nahi.
+Ye guide beginner ke liye hai (Roman Urdu). Har step order mein follow karein.
 
-**Aap ko 3 free accounts chahiye:** GitHub, Supabase, Netlify (teeno ke liye sirf email chahiye, card nahi).
-
-> **Pehle ye parh lein:** Is project ko mere (Claude ke) environment mein install/build karke test **nahi** kiya ja saka (internet band tha). Isliye pehli baar Netlify par build chalne par koi chhota error aa sakta hai. Agar aaye to Netlify ke "Deploy log" ka aakhri hissa copy karke mujhe bhej dein, main fix kar dunga. Detail neeche "Kya test hua, kya nahi" mein hai.
+> **Sach pehle:** Is project ko mere environment mein install/build karke chalaya nahi ja saka (internet band hai). Is liye pehli deploy par koi chhota error aa sakta hai. Cloudflare ke "Build log" ka aakhri hissa bhej dein, theek ho jayega. Detail neeche "Kya test hua, kya nahi".
 
 ---
 
-## Is mein kya kya hai
+## Version 2 mein kya naya hai
 
-**Customer website:** homepage (banners, categories, featured products, new arrivals), search, category pages, product page (photos + video), Add to Cart, Buy Now, cart, checkout (naam, phone, address, city, notes), order number, order confirmation, WhatsApp button, Privacy/Shipping/Return policy aur Contact pages.
-
-**Admin dashboard (`/admin`):** secure login, products add/edit/delete, photos aur video upload, regular price / sale price / discount / stock / SKU / category, categories, banners aur offers, orders (search, status change, customer details), dashboard statistics, delivery charges aur contact settings.
-
-**Security:** customer sirf products dekh sakta hai. Orders sirf server ke zariye bante hain aur price hamesha database se aati hai (browser se badli nahi ja sakti). Admin pages sirf admin account ko khulte hain. Secret key sirf Netlify mein rehti hai, code mein kahin nahi.
-
-**Abhi shamil NAHI:** online payment gateway, seller/vendor portal (sirf database tayyar hai), customer accounts. Ye jaan bujh kar nahi banaye.
+1. **Daraz jaisa order flow:** Pending → Packed / Ready to Ship → Dispatched → Delivered, aur Cancelled. Order **Cancel** karte hi saman **khud wapas stock mein** chala jata hai. Cancelled ya Delivered order dobara badla nahi ja sakta.
+2. **Customer login:** mobile number (ya email) + password. Customer apne orders ki status history dekh sakta hai (`/account`). Bina login wale customer `/track` par order number + phone se order dekh sakte hain.
+3. **Admin → Customers:** registered customers aur guest (direct) checkouts ki ginti, customer list, aur password reset.
+4. **Packing label aur invoice:** Admin → Orders → order kholen → **Print Packing Label** (4×6 in thermal ya 3×7 in) ya **Print Invoice** (A4). Label par logo/naam, support phone, order ID + barcode, customer ki details, items, aur COD amount hota hai.
+5. **City ke hisab se payment:** **Rawalpindi / Islamabad** mein **Cash on Delivery**. **Baqi cities** mein **Advance Payment** (Bank / EasyPaisa / JazzCash ki details aur QR checkout par dikhte hain). Ye details aur COD cities ki list **Admin → Settings** se badalti hain.
+6. **Cloudflare Pages ke liye:** tamam routes ab **Edge runtime** par hain.
 
 ---
 
-## STEP 1 — Supabase (database) banayein
+## Aap ka maujooda masla: "We could not place your order"
 
-1. https://supabase.com par jayen → **Sign up** → **New project**.
-2. Name: `lootmall`. **Database Password** koi strong password likhein aur kahin save kar lein. Region: aap ke qareeb wala (jaise Singapore). Plan: **Free**. **Create new project** dabayen aur 1–2 minute intezar karein.
-3. Left menu mein **SQL Editor** → **New query**.
-4. Is folder ki file `supabase/schema.sql` kholen, **saara text copy** karein, SQL Editor mein paste karein, phir **Run** dabayen. "Success" aana chahiye. (Ye sirf **ek dafa** chalani hai.)
-5. **Keys copy karein:** left menu mein **Project Settings → API** (ya "API Keys"). Teen cheezen note karein:
-   - **Project URL** (`https://xxxx.supabase.co`)
-   - **anon** (public) key
-   - **service_role** key (isay **kisi ko mat dikhayen**, sirf Netlify mein dalni hai)
+Is ki 2 wajahein ho sakti hain, dono ab theek ki gayi hain:
 
-   Agar sirf "Publishable key" aur "Secret key" dikhein, to "Legacy API keys" tab mein anon/service_role mil jati hain. Wohi use karein.
+1. **Node.js route Cloudflare par nahi chalta.** Pehle `/api/checkout` Node.js runtime par tha. Ab Edge par hai.
+2. **Cloudflare mein `SUPABASE_SERVICE_ROLE_KEY` na hona.** Order banane ke liye ye key zaroori hai. Error ke aakhir mein `(Code: CONFIG)` aaye to yahi wajah hai. Cloudflare Pages → Settings → **Variables and Secrets** mein check karein, aur **Production aur Preview dono** mein daalein. Variable badalne ke baad **naya deploy** zaroori hai (purani deploy nayi value nahi uthati).
 
-### Pehla admin banayein
-1. Supabase mein **Authentication → Users → Add user → Create new user**. Apni email aur strong password dalein, **Auto Confirm User** tick karein, **Create user**.
-2. **SQL Editor → New query** mein ye likhein (apni email ke saath) aur **Run** karein:
+Agar code `(Code: PGRST202)` ya `42883` aaye, to database ka naya function nahi bana: neeche "Upgrade" ka SQL step karein.
+
+---
+
+## UPGRADE (agar purana v1 database already bana hua hai)
+
+**Order bahut zaroori hai: pehle SQL, phir code.**
+
+1. Supabase → **SQL Editor → New query**.
+2. File **`supabase/upgrade-v2.sql`** ka poora text paste karke **Run**. "Success" aana chahiye. (Purane orders ki status khud naye naam mein badal jati hain: Confirmed → Pending, Ready to Ship → Packed, Shipped → Dispatched.)
+3. Phir naya code GitHub par upload karein (neeche Step 2) aur Cloudflare par deploy karein.
+
+**Naya (khali) database hai?** To sirf **`supabase/schema.sql`** chalayen (isme v2 shamil hai). `upgrade-v2.sql` na chalayen.
+
+---
+
+## STEP 1 — Supabase (database)
+
+1. https://supabase.com → **New project** (name `lootmall`, strong database password, region apka qareebi, **Free** plan).
+2. **SQL Editor → New query** mein `supabase/schema.sql` paste karke **Run** (sirf naye database ke liye).
+3. **Project Settings → API** se teen cheezen copy karein: **Project URL**, **anon** key, **service_role** key (service_role key kisi ko na dikhayen).
+
+### Pehla admin
+1. **Authentication → Users → Add user → Create new user** (apni email + strong password, **Auto Confirm User** tick).
+2. SQL Editor mein (apni email ke saath) chalayen:
    ```sql
    update public.profiles set role = 'admin'
    where id = (select id from auth.users where email = 'APNI-EMAIL-YAHAN');
    ```
-3. **Authentication → Sign In / Providers** (ya Settings) mein **"Allow new users to sign up"** ko **OFF** karein, taake koi aur account na bana sake.
+3. **Authentication → Sign In / Providers** mein **"Allow new users to sign up"** OFF rakhein. Customer accounts website khud server se banati hai, is liye ye OFF hone se customers ko koi masla nahi hota.
 
 ---
 
-## STEP 2 — GitHub par upload karein
+## STEP 2 — GitHub
 
-1. https://github.com par account banayein → **New repository** → name `lootmall` → **Private** → **Create repository**.
-2. Is zip ko computer par **Extract** karein. Andar `lootmall` folder hai.
-3. GitHub repository page par **uploading an existing file** link dabayen.
-4. `lootmall` folder ke **andar ki saari files aur folders** (package.json, src, supabase, public, ...) drag karke daal dein. Agar GitHub kahe ke files zyada hain (100 se zyada), to do hisson mein upload karein.
-5. Neeche **Commit changes** dabayen.
+1. github.com par **private** repository `lootmall` banayein.
+2. Zip extract karein. `lootmall` folder ke **andar ki saari files aur folders** repository mein upload karein (**Add file → Upload files**). Purani files naye content se replace ho jati hain.
+3. **Commit changes**.
 
-> Dhyan: koi `.env.local` file kabhi upload na karein. Is project mein wo hai hi nahi.
+> GitHub ke browser upload mein ek dafa mein **100 files** ki limit hoti hai. Ab project mein 100 se zyada files hain, is liye **do hisson mein** upload karein (pehle `src` folder, phir baqi sab).
 
 ---
 
-## STEP 3 — Netlify par deploy karein
+## STEP 3 — Cloudflare Pages par deploy
 
-1. https://app.netlify.com → **Add new project → Import an existing project → GitHub** → apni `lootmall` repository chunein.
-2. Build settings **jaisi hain waisi rehne dein** (Netlify Next.js khud pehchan leta hai).
-3. **Environment variables** (Add variable) mein ye 4 add karein:
+1. dash.cloudflare.com → **Workers & Pages → Create → Pages → Connect to Git** → `lootmall` repository.
+2. Build settings:
+   - **Framework preset:** Next.js
+   - **Build command:** `npx @cloudflare/next-on-pages@1`
+   - **Build output directory:** `.vercel/output/static`
+3. **Environment variables** (Production **aur** Preview) add karein:
 
    | Name | Value |
    |---|---|
-   | `NEXT_PUBLIC_SUPABASE_URL` | Supabase ka Project URL |
+   | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL |
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key |
-   | `SUPABASE_SERVICE_ROLE_KEY` | service_role key |
+   | `SUPABASE_SERVICE_ROLE_KEY` | service_role key (**Secret** type) |
    | `NEXT_PUBLIC_SITE_URL` | `https://lootmall.online` |
+   | `NODE_VERSION` | `20` |
 
-4. **Deploy** dabayen. 2–5 minute lagte hain.
-5. Deploy ke baad Netlify aap ko ek link dega, jaise `https://kuch-naam.netlify.app`. **Pehle isi link par poora test karein** (neeche checklist).
+4. **Settings → Functions (Runtime) → Compatibility flags:** `nodejs_compat` add karein (Production aur Preview dono). Compatibility date `2024-09-23` ya us se nayi.
+5. **Save and Deploy**. Variable ya flag badalne ke baad hamesha **Retry deployment** / naya commit karein.
+6. Cloudflare ka `.pages.dev` link kholen aur neeche ki testing checklist chalayen.
 
-Agar baad mein koi variable badlein, to **Deploys → Trigger deploy → Clear cache and deploy site** karein.
+> Cloudflare Pages par **ISR / revalidate** support nahi hota, is liye saare pages har request par taaza data lete hain. Aap Admin se kuch badlein to foran nazar aata hai.
 
----
+Domain: `lootmall.online` ko apne maujooda Cloudflare account mein Pages project ke **Custom domains** se jorein. Jab tak naya store test na ho jaye, purani site wale records na hatayen.
 
-## STEP 4 — Apna domain lootmall.online jorein (HTTPS ke saath)
-
-**Aham:** Naya store pehle `netlify.app` link par test karein. Domain tab badlein jab aap ko yaqeen ho. Domain badalne se purani site wahan se hat jayegi jahan domain lagi hui hai.
-
-1. Naye Netlify project mein **Domain management → Add a domain** → `lootmall.online` likhein.
-2. Agar Netlify kahe ke "domain pehle se aap ki kisi dusri site par hai" (purani LootMall site), to pehle purani site ke **Domain management** mein ja kar `lootmall.online` aur `www` **hata dein**, phir naye project mein add karein. (Ye wohi lamha hai jab live site naye store par switch hoti hai.)
-3. DNS: agar aap ka DNS Cloudflare mein hai, to Netlify jo records dikhaye wo wahan dalen ya check karein ke pehle se sahi hain. Netlify wale records ko Cloudflare mein **"DNS only" (grey cloud)** rakhein, warna HTTPS certificate mein masla aa sakta hai. Jo records Netlify ne nahi maange (jaise `api.lootmall.online` ya email wale), unhein **chhedein nahi**.
-4. **Domain management → HTTPS** mein **Verify DNS configuration** phir **Provision certificate** (Let's Encrypt) dabayen. Mukammal hone par **Force HTTPS** on karein.
-5. Agar kuch bigre, to domain wapis purani site par laga kar pehli halat par aa sakte hain. Isi liye pehle test zaroori hai.
+(Netlify par bhi ye project chal sakta hai, `netlify.toml` maujood hai.)
 
 ---
 
-## STEP 5 — Apna logo lagayein
+## Admin kaise istemal karein (`/admin`)
 
-1. Apna logo file (jaise `logo.png`) `public` folder mein daalein (GitHub par **Add file → Upload files**).
-2. GitHub par `src/lib/site.ts` kholen, pencil icon dabayen, `LOGO_SRC = null` ko `LOGO_SRC = "/logo.png"` kar dein, **Commit**. Netlify khud dobara deploy kar dega.
+- **Orders:** order kholein → status badlein → **Print Packing Label** / **Print Invoice**. Label par COD amount tab aata hai jab order COD ho aur Paid na ho. Advance order ko packing se pehle **Payment status = Paid** karein (customer ka transaction ID order mein likha hota hai).
+- **Settings:** delivery charge, phone/email, **COD cities** (comma se alag, jaise `Rawalpindi, Islamabad, Pindi, RWP`), aur Bank / EasyPaisa / JazzCash ki details + QR image upload. Khali account customer ko nahi dikhta.
+- **Customers:** registered vs guest ginti, customer ki password reset.
+- **Products / Categories / Banners:** pehle jaisa.
 
-Jab tak logo nahi lagta, sirf text naam "LootMall" dikhta hai. Maine koi logo nahi banaya.
-
----
-
-## Admin panel kaise istemal karein
-
-Login: `https://lootmall.online/admin`
-
-1. **Categories:** pehle se 5 starter categories hain. Rename/hide/delete ya nayi add kar sakte hain.
-2. **Products → Add product:** naam, SKU, category, price, sale price (ya discount %), stock likhein; photos aur (optional) video upload karein; **Save product**. Pehli photo main photo hoti hai.
-3. **Banners:** "Top of homepage" slider ke liye, "Offer tile" categories ke neeche ke offers ke liye.
-4. **Orders:** order kholein, status badlein (Pending → Confirmed → Ready to Ship → Shipped → Delivered / Cancelled). Customer ko WhatsApp ka link bhi wahin hai.
-5. **Settings:** delivery charge (shuru mein Rs. 299), phone, email, tagline.
-
-Note: Admin mein koi photo "remove" karne se wo product se hat jati hai, lekin Supabase Storage mein file rehti hai (free storage ki limit ka khayal rakhein).
+**City ka rule:** customer ki likhi hui city mein COD list ka koi lafz aaye (jaise "Islamabad F-7" mein "Islamabad") to COD, warna Advance. Ye faisla **database** karta hai, browser nahi, is liye customer ise badal nahi sakta.
 
 ---
 
-## Testing checklist (publish karne se pehle)
+## Testing checklist
 
-- [ ] Homepage khulta hai, koi error nahi, mobile par theek dikhta hai.
-- [ ] `/admin` par bina login jayen → login page par bhej diya jata hai.
-- [ ] Admin login hota hai. Galat password par error aata hai.
-- [ ] Ek test product add karein (photo ke saath) → store par nazar aata hai.
-- [ ] Sale price lagayen → discount badge aur price theek dikhte hain.
-- [ ] Search se product milta hai. Category page kaam karta hai.
-- [ ] Product page: gallery, quantity, **Add to Cart** aur **Buy Now** kaam karte hain.
-- [ ] Cart: quantity badalna, remove, total + Rs. 299 delivery sahi hai. Page refresh par cart bacha rehta hai.
-- [ ] Checkout: khali ya galat phone number par error aata hai. Sahi data par order ban jata hai.
-- [ ] Confirmation page par unique order number (jaise `LM-261013-AB12CD`) aata hai. Cart khali ho jata hai.
-- [ ] Admin → Orders mein wohi order dikhta hai, details sahi hain, status badalta hai.
-- [ ] Order ke baad product ka stock kam hua.
-- [ ] Settings mein delivery charge badal kar naye order par check karein.
-- [ ] Out-of-stock product ka "Add to Cart" band hai.
-- [ ] WhatsApp button sahi number par khulta hai.
-- [ ] https://lootmall.online (padlock ke saath) khulta hai.
-- [ ] Test orders/products delete kar dein.
+- [ ] Order: city **Islamabad** likhein → "Cash on Delivery available" dikhe, order ban jaye.
+- [ ] Order: city **Lahore** likhein → payment accounts dikhein, **Transaction ID ke bina** order na bane, ID ke saath ban jaye.
+- [ ] Admin → Orders mein order dikhe, payment "Advance / Awaiting verification" ho.
+- [ ] Status Pending → Packed → Dispatched → Delivered badal kar dekhein. COD order Delivered par khud Paid ho.
+- [ ] **Cancel test:** ek test order cancel karein → product ka stock wapas barhe. Cancel ke baad status dobara badalne ki koshish par error aaye.
+- [ ] **Print Packing Label** 4×6 aur 3×7 dono khulein, barcode nazar aaye, print preview mein sirf label ho.
+- [ ] Customer signup (mobile + password) → login → `/account` par apne orders aur status history.
+- [ ] Login ke baad order karein → woh order `/account` mein aaye. Bina login order `/track` se (order number + phone) dikhe.
+- [ ] Admin → Customers mein registered aur guest ginti.
+- [ ] Admin → Settings mein bank/EasyPaisa/JazzCash + QR save karein → checkout par (non-COD city) dikhein.
+- [ ] `/admin` bina login kholein → login page par bhej diya jaye.
+- [ ] Test orders delete/cancel kar dein, stock theek karein.
 
 ---
 
 ## Kya test hua, kya nahi (sach)
 
-- **Nahi chalaya gaya:** `npm install`, `npm run build`, poora TypeScript type-check, aur live Supabase/Netlify. Mere environment mein internet band tha. Isliye "build pass hua" ka koi dawa nahi hai.
-- **Chalaya gaya:** files ka syntax check (TypeScript compiler se), aur imports/routes ka manual review.
-- Pehli deploy par koi chhota error aa sakta hai (jaise type ka masla ya package version). Log bhej dein, fix ho jayega.
+- **Nahi chalaya gaya:** `npm install`, `npm run build`, poora TypeScript check, Cloudflare `next-on-pages` build, aur live Supabase. Mere environment mein internet band hai.
+- **Chalaya gaya:** syntax check (0 errors), 222 imports/exports ka check, barcode table ke structural checks (har pattern ka jama 11, bar widths even, sab unique).
+- **Barcode:** Code 128 apni hi encoder se banta hai. Maine kisi asli scanner se scan nahi kiya. Pehle 2–3 labels print karke apne phone/scanner se test karein.
+- **next-on-pages:** ye Cloudflare ka tool hai. Is ka Next.js 15.5 ke saath chalna maine verify nahi kiya. Build fail ho to log bhej dein.
+- **Edge limit:** Cloudflare ki free plan par worker size ki limit hoti hai. Agar "script too large" aaye to mujhe bata dein.
 
-## Aam masail
+## Mehdood cheezein (jaan bujh kar / abhi nahi)
 
-- **Site par "Products are coming soon":** ya to abhi products nahi dale, ya Netlify ke environment variables ghalat hain. Variables theek karke "Clear cache and deploy" karein.
-- **Admin login ke baad wapas login page:** check karein ke SQL se `role = 'admin'` wali query chali thi aur email bilkul wohi hai.
-- **Photo upload fail:** schema.sql poori Run hui thi? (Storage bucket usi se banta hai.) Photo 10 MB se chhoti aur video 50 MB se chhoti honi chahiye.
-- **Supabase free project ruk jaye:** bohat din istemal na ho to free project pause ho sakta hai. Supabase dashboard mein **Restore** dabayen.
-- **Order na bane, "could not place order":** `SUPABASE_SERVICE_ROLE_KEY` Netlify mein theek hai? Phir deploy karein.
+- **Customer password reset khud nahi hota** (SMS/email ka kharcha nahi). Admin → Customers se "Set new password" karein.
+- Signup par mobile number ka OTP verify nahi hota. Lekin orders sirf login account se jude hote hain (phone number se nahi), is liye koi dusre ke orders nahi dekh sakta.
+- Signup/checkout par rate-limit nahi (sirf hidden spam-trap field). Zyada spam par Cloudflare ka Turnstile/WAF lagayen.
+- Advance payment ka screenshot customer WhatsApp par bhejta hai. Payment ko aap khud verify karke Paid karte hain.
+- Cancel par advance payment ki refund aap ko khud karni hogi.
 
-## Technical notes (developer ke liye)
+## Technical notes
 
-- Next.js 15 App Router, TypeScript, Tailwind 3, Supabase (Postgres + Auth + Storage). Netlify ka official Next.js runtime server features (API routes, server actions, middleware) chalata hai. Static-only hosting par ye project **nahi** chalega.
-- Checkout: browser sirf `product_id` + `quantity` bhejta hai. `POST /api/checkout` zod se validate karta hai aur service-role se Postgres function `create_order()` chalata hai, jo price, stock aur delivery charge khud nikalta hai aur stock atomically kam karta hai. Is function par `anon/authenticated` ka execute revoke hai.
-- RLS: public sirf active products/categories/banners aur settings parh sakta hai. Orders aur order_items sirf admin. Storage bucket `product-media`: public read, admin write.
-- Marketplace ke liye tayyar: `vendors` table (commission_rate), `products.vendor_id`, `order_items.vendor_id`, `profiles.role = 'seller'`. Seller portal aur payouts abhi nahi bane.
-- Limitations: checkout par rate-limiting nahi (sirf hidden spam-trap field). Zyada traffic par Cloudflare/Netlify ki rate limits ya CAPTCHA add karna chahiye.
-- Local chalane ke liye (optional): `npm install`, `.env.example` ko `.env.local` mein copy karke values bharein, phir `npm run dev`.
-- Policy pages (Privacy/Shipping/Return) ka text aam sa draft hai. Launch se pehle apne business ke hisab se parh kar badal lein (`src/app/(shop)/*-policy/page.tsx`).
+- Next.js 15 App Router, Tailwind 3, Supabase. Tamam pages/layouts/route handlers par `export const runtime = "edge"` aur dynamic rendering. Middleware sirf `/admin`, `/account`, `/checkout` par chalta hai.
+- Order creation: `POST /api/checkout` → zod validation → Postgres function `create_order()` (service role). Ye price, stock, delivery charge, COD/advance (city se) aur advance mein transaction ID ki shart khud lagata hai.
+- Status rules aur auto-restock database triggers mein hain (`orders_before_update`, `orders_after_change`), is liye admin ke ilawa kisi raste se bhi bypass nahi hote.
+- RLS: customers sirf apne orders / items / history parh sakte hain (`customer_id = auth.uid()`). Admin sab. Public sirf active products, banners, categories, settings.
+- Customers ka login Supabase Auth par hai: mobile number ek private address `<number>@customers.lootmall.online` ban jata hai (koi email nahi bheji jati), asli email profile mein sirf contact ke liye hoti hai.
+- Policy pages ka text aam draft hai, launch se pehle apne business ke hisab se parh lein.

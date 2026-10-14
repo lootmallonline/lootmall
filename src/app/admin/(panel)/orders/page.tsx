@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { formatPKR } from "@/lib/format";
 import { sanitizeSearch } from "@/lib/utils";
-import { ORDER_STATUSES, ORDER_STATUS_LABELS, type Order } from "@/lib/types";
+import { ORDER_STATUSES, ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, type Order } from "@/lib/types";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Pagination } from "@/components/shop/Pagination";
 
@@ -48,9 +48,9 @@ export default async function AdminOrders({ searchParams }: Props) {
         <div className="card text-sm text-ink/70">No orders found.</div>
       ) : (
         <div className="card overflow-x-auto p-0">
-          <table className="w-full min-w-[44rem] text-left text-sm">
+          <table className="w-full min-w-[52rem] text-left text-sm">
             <thead className="border-b border-maroon-100 bg-maroon-50 text-xs">
-              <tr><th className="p-3">Order</th><th className="p-3">Customer</th><th className="p-3">City</th><th className="p-3">Total</th><th className="p-3">Status</th><th className="p-3">Date</th></tr>
+              <tr><th className="p-3">Order</th><th className="p-3">Customer</th><th className="p-3">City</th><th className="p-3">Total</th><th className="p-3">Payment</th><th className="p-3">Status</th><th className="p-3">Date</th></tr>
             </thead>
             <tbody className="divide-y divide-maroon-100">
               {orders.map((o) => (
@@ -59,6 +59,7 @@ export default async function AdminOrders({ searchParams }: Props) {
                   <td className="p-3">{o.customer_name}<span className="block text-xs text-ink/60">{o.phone}</span></td>
                   <td className="p-3">{o.city}</td>
                   <td className="p-3 font-medium">{formatPKR(o.total)}</td>
+                  <td className="p-3 text-xs">{PAYMENT_METHOD_LABELS[o.payment_method]}<span className={`block ${o.payment_status === "paid" ? "text-emerald-700" : "text-amber-700"}`}>{PAYMENT_STATUS_LABELS[o.payment_status]}</span></td>
                   <td className="p-3"><StatusBadge status={o.status} /></td>
                   <td className="p-3 whitespace-nowrap text-xs">{new Date(o.created_at).toLocaleString("en-PK", { timeZone: "Asia/Karachi", dateStyle: "medium", timeStyle: "short" })}</td>
                 </tr>
@@ -71,3 +72,6 @@ export default async function AdminOrders({ searchParams }: Props) {
     </div>
   );
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";

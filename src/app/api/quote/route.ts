@@ -35,3 +35,7 @@ export async function POST(req: Request) {
     { headers: { "Cache-Control": "no-store" } }
   );
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";
+export const dynamic = "force-dynamic";

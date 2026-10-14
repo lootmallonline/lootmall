@@ -1,255 +1,90 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
+import { checkoutSchema } from "@/lib/validation";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { createServerSupabase } from "@/lib/supabase/server";
 
-export async function POST(req: NextRequest) {
+// Customer-facing messages thrown by the create_order database function.
+const FRIENDLY = /(stock|no longer available|cart is empty|invalid quantity|advance payment)/i;
+
+export async function POST(req: Request) {
+  let body: unknown;
   try {
-    // Access environment variables securely in Cloudflare/Next.js runtime
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  }
 
-    if (!supabaseUrl || !serviceKey) {
-      console.error("Checkout: Supabase environment variables missing");
-      return NextResponse.json(
-        { error: "Order service is temporarily unavailable." },
-        { status: 500 }
-      );
+  // Spam trap: bots fill the hidden "website" field, people never see it.
+  if (typeof body === "object" && body !== null && (body as { website?: unknown }).website) {
+    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  }
+
+  const parsed = checkoutSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Please check the highlighted fields.", fieldErrors: parsed.error.flatten().fieldErrors },
+      { status: 422 }
+    );
+  }
+  const d = parsed.data;
+
+  try {
+    // If the customer is logged in, the order is linked to their account.
+    let customerId: string | null = null;
+    try {
+      const userClient = await createServerSupabase();
+      const {
+        data: { user },
+      } = await userClient.auth.getUser();
+      customerId = user?.id ?? null;
+    } catch {
+      customerId = null;
     }
 
-    const supabase = createClient(supabaseUrl, serviceKey);
-    const body = await req.json();
-
-    const {
-      name,
-      phone,
-      address,
-      city,
-      notes,
-      items,
-      spam_trap,
-    } = body;
-
-    // Spam trap check
-    if (spam_trap) {
-      return NextResponse.json(
-        { error: "Invalid request." },
-        { status: 400 }
-      );
-    }
-
-    // Required fields check
-    if (
-      typeof name !== "string" || !name.trim() ||
-      typeof phone !== "string" || !phone.trim() ||
-      typeof address !== "string" || !address.trim() ||
-      typeof city !== "string" || !city.trim()
-    ) {
-      return NextResponse.json(
-        { error: "Please enter your name, phone, address and city." },
-        { status: 400 }
-      );
-    }
-
-    if (!Array.isArray(items) || items.length === 0) {
-      return NextResponse.json(
-        { error: "Your cart is empty." },
-        { status: 400 }
-      );
-    }
-
-    // Validate and combine duplicate product IDs
-    const quantities = new Map<string, number>();
-
-    for (const item of items) {
-      const id = item?.product_id || item?.id;
-      const quantity = Number(item?.quantity ?? 1);
-
-      if (
-        typeof id !== "string" ||
-        !Number.isInteger(quantity) ||
-        quantity < 1 ||
-        quantity > 100
-      ) {
-        return NextResponse.json(
-          { error: "Invalid product or quantity in cart." },
-          { status: 400 }
-        );
-      }
-
-      quantities.set(id, (quantities.get(id) || 0) + quantity);
-    }
-
-    const productIds = [...quantities.keys()];
-
-    // Verify products in Supabase
-    const { data: products, error: productError } = await supabase
-      .from("products")
-      .select(
-        "id, name, sku, regular_price, sale_price, stock, is_active"
-      )
-      .in("id", productIds);
-
-    if (productError) {
-      console.error("Checkout product lookup failed:", productError.message);
-      return NextResponse.json(
-        { error: "Unable to verify cart products. Please try again." },
-        { status: 500 }
-      );
-    }
-
-    if (!products || products.length !== productIds.length) {
-      return NextResponse.json(
-        { error: "A product in your cart is no longer available." },
-        { status: 400 }
-      );
-    }
-
-    const formattedItems = [];
-    let subtotal = 0;
-
-    for (const product of products) {
-      const quantity = quantities.get(product.id)!;
-
-      if (!product.is_active) {
-        return NextResponse.json(
-          { error: `${product.name} is currently unavailable.` },
-          { status: 400 }
-        );
-      }
-
-      if (product.stock < quantity) {
-        return NextResponse.json(
-          { error: `Insufficient stock for ${product.name}.` },
-          { status: 400 }
-        );
-      }
-
-      const price =
-        product.sale_price != null && product.sale_price > 0
-          ? product.sale_price
-          : product.regular_price;
-
-      const lineTotal = price * quantity;
-
-      if (!Number.isSafeInteger(lineTotal)) {
-        return NextResponse.json(
-          { error: "Invalid product total." },
-          { status: 400 }
-        );
-      }
-
-      subtotal += lineTotal;
-
-      formattedItems.push({
-        product_id: product.id,
-        name: product.name,
-        sku: product.sku,
-        unit_price: price,
-        quantity,
-        line_total: lineTotal,
-      });
-    }
-
-    // Payment Logic: COD for Rawalpindi/Islamabad, Advance Payment elsewhere
-    const normalizedCity = city.trim().toLowerCase();
-    const isCODAllowed =
-      normalizedCity === "rawalpindi" ||
-      normalizedCity === "islamabad";
-
-    const paymentMethod = isCODAllowed ? "COD" : "Advance Payment";
-    const deliveryCharge = 299;
-    const total = subtotal + deliveryCharge;
-
-    const orderNumber =
-      "LM-" + Date.now().toString().slice(-8) +
-      Math.floor(Math.random() * 10);
-
-    // Save order in Supabase
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        order_number: orderNumber,
-        status: "pending",
-        customer_name: name.trim(),
-        phone: phone.trim(),
-        address: address.trim(),
-        city: city.trim(),
-        customer_phone: phone.trim(),
-        customer_address: address.trim(),
-        customer_city: city.trim(),
-        notes: typeof notes === "string" ? notes.trim() : null,
-        subtotal,
-        delivery_charge: deliveryCharge,
-        total,
-        payment_method: paymentMethod,
-        payment_status: "pending",
-        tracking_stage: "pending",
-      })
-      .select("id, order_number")
-      .single();
-
-    if (orderError || !order) {
-      console.error("Checkout order insert failed:", orderError?.message);
-
-      return NextResponse.json(
-        { error: "Unable to save your order. Please try again." },
-        { status: 500 }
-      );
-    }
-
-    // Insert order items
-    const { error: itemsError } = await supabase
-      .from("order_items")
-      .insert(
-        formattedItems.map((item) => ({
-          ...item,
-          order_id: order.id,
-          vendor_id: null,
-        }))
-      );
-
-    if (itemsError) {
-      console.error("Checkout item insert failed:", itemsError.message);
-
-      // Cleanup incomplete order
-      const { error: cleanupError } = await supabase
-        .from("orders")
-        .delete()
-        .eq("id", order.id);
-
-      if (cleanupError) {
-        console.error("Checkout cleanup failed:", cleanupError.message);
-      }
-
-      return NextResponse.json(
-        { error: "Unable to save order items. Please try again." },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      order_number: order.order_number,
-      subtotal,
-      delivery_charge: deliveryCharge,
-      total,
-      payment_method: paymentMethod,
-      is_cod: isCODAllowed,
-      message: "Your order has been placed successfully.",
+    const supabase = createServiceClient();
+    // The database function decides prices, stock, delivery charge and COD/advance itself.
+    const { data, error } = await supabase.rpc("create_order", {
+      p_customer_name: d.customer_name,
+      p_phone: d.phone,
+      p_address: d.address,
+      p_city: d.city,
+      p_notes: d.notes,
+      p_items: d.items,
+      p_customer_id: customerId,
+      p_payment_reference: d.payment_reference,
     });
 
-  } catch (error) {
-    console.error(
-      "Checkout exception:",
-      error instanceof Error ? error.message : "Unknown error"
-    );
+    if (error) {
+      if (FRIENDLY.test(error.message)) {
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      }
+      const code = error.code || (/fetch/i.test(error.message) ? "NETWORK" : "DB");
+      console.error("create_order failed:", code, error.message);
+      return NextResponse.json(
+        { error: `We could not place your order. Please try again or contact us on WhatsApp. (Code: ${code})` },
+        { status: 500 }
+      );
+    }
 
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row?.out_order_number) {
+      return NextResponse.json({ error: "We could not place your order. Please try again. (Code: EMPTY)" }, { status: 500 });
+    }
+    return NextResponse.json({
+      order_number: row.out_order_number as string,
+      total: row.out_total as number,
+      payment_method: row.out_payment_method as string,
+    });
+  } catch (e) {
+    console.error("checkout error:", e);
+    const code = e instanceof Error && /environment variables/i.test(e.message) ? "CONFIG" : "SERVER";
     return NextResponse.json(
-      { error: "An unexpected error occurred. Please try again." },
+      { error: `We could not place your order. Please try again or contact us on WhatsApp. (Code: ${code})` },
       { status: 500 }
     );
   }
 }
 
-export async function GET() {
-  return NextResponse.json({ status: "Checkout API active" });
-}
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";
+export const dynamic = "force-dynamic";

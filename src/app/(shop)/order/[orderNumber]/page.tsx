@@ -5,7 +5,14 @@ import { CheckCircle2 } from "lucide-react";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/data";
 import { formatPKR, whatsappUrl } from "@/lib/format";
-import { ORDER_STATUS_LABELS, type Order, type OrderItem, type OrderStatus } from "@/lib/types";
+import { PaymentDetails } from "@/components/shop/PaymentDetails";
+import {
+  ORDER_STATUS_LABELS,
+  PAYMENT_STATUS_LABELS,
+  type Order,
+  type OrderItem,
+  type OrderStatus,
+} from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Order confirmation", robots: { index: false, follow: false } };
@@ -59,6 +66,32 @@ export default async function OrderPage({ params }: Props) {
         <p className="text-sm text-ink/70">Delivering to {o.city}. Please keep your order number for any questions.</p>
       </div>
 
+      <section className="card mt-6 space-y-3" aria-labelledby="pay-heading">
+        <h2 id="pay-heading" className="font-display text-lg font-bold text-maroon-700">Payment</h2>
+        {o.payment_method === "cod" ? (
+          <p className="text-sm">
+            <span className="font-semibold">Cash on Delivery.</span> Please keep {formatPKR(o.total)} ready and pay the rider when your parcel arrives.
+          </p>
+        ) : (
+          <>
+            <p className="text-sm">
+              <span className="font-semibold">Advance payment.</span> Status: {PAYMENT_STATUS_LABELS[o.payment_status]}.
+              {o.payment_status !== "paid" && " We will confirm your payment and then pack your order."}
+            </p>
+            {o.payment_reference && <p className="text-sm">Your transaction ID: <span className="font-mono">{o.payment_reference}</span></p>}
+            {o.payment_status !== "paid" && (
+              <>
+                <p className="text-sm">If you have not paid yet, send {formatPKR(o.total)} to one of these accounts:</p>
+                <PaymentDetails settings={settings} />
+                <a href={whatsappUrl(settings.contact_phone, `Hello LootMall, I paid for order ${o.order_number}. Here is my payment screenshot.`)} target="_blank" rel="noopener noreferrer" className="btn-gold">
+                  Send payment screenshot on WhatsApp
+                </a>
+              </>
+            )}
+          </>
+        )}
+      </section>
+
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
         <a href={whatsappUrl(settings.contact_phone, `Hello LootMall, my order number is ${o.order_number}.`)} target="_blank" rel="noopener noreferrer" className="btn-primary">
           Message us on WhatsApp
@@ -68,3 +101,6 @@ export default async function OrderPage({ params }: Props) {
     </div>
   );
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";

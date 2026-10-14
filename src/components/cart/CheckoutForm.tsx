@@ -7,11 +7,20 @@ import { useCart } from "./CartProvider";
 import { useQuote } from "./useQuote";
 import { OrderSummary } from "./OrderSummary";
 import { EmptyState } from "@/components/shop/EmptyState";
+import { PaymentDetails } from "@/components/shop/PaymentDetails";
 import { formatPKR } from "@/lib/format";
+import { isCodCity } from "@/lib/payment";
+import type { Settings } from "@/lib/types";
 
-type FieldErrors = Partial<Record<"customer_name" | "phone" | "address" | "city" | "notes", string[]>>;
+type FieldErrors = Partial<Record<"customer_name" | "phone" | "address" | "city" | "notes" | "payment_reference", string[]>>;
 
-export function CheckoutForm() {
+export function CheckoutForm({
+  settings,
+  defaults,
+}: {
+  settings: Settings;
+  defaults: { name: string; phone: string } | null;
+}) {
   const router = useRouter();
   const { items, hydrated, clear } = useCart();
   const quote = useQuote();
@@ -19,6 +28,9 @@ export function CheckoutForm() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [city, setCity] = useState("");
+  const cityEntered = city.trim().length >= 2;
+  const isCod = isCodCity(city, settings.cod_cities);
 
   if (!hydrated || done) {
     return (
@@ -40,6 +52,11 @@ export function CheckoutForm() {
     );
   }
 
+  const fe = (name: keyof FieldErrors) =>
+    fieldErrors[name]?.[0] ? (
+      <p className="mt-1 text-xs text-red-700" role="alert">{fieldErrors[name]?.[0]}</p>
+    ) : null;
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (submitting) return;
@@ -57,6 +74,7 @@ export function CheckoutForm() {
           address: form.get("address"),
           city: form.get("city"),
           notes: form.get("notes") ?? "",
+          payment_reference: isCod ? "" : form.get("payment_reference") ?? "",
           website: form.get("website") ?? "",
           // Only IDs and quantities are sent. The server decides every price.
           items: items.map((i) => ({ product_id: i.productId, quantity: i.quantity })),
@@ -82,11 +100,6 @@ export function CheckoutForm() {
     }
   }
 
-  const fe = (name: keyof FieldErrors) =>
-    fieldErrors[name]?.[0] ? (
-      <p className="mt-1 text-xs text-red-700" role="alert">{fieldErrors[name]?.[0]}</p>
-    ) : null;
-
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_24rem]">
       <form onSubmit={onSubmit} className="card space-y-4" noValidate>
@@ -94,12 +107,12 @@ export function CheckoutForm() {
 
         <div>
           <label htmlFor="customer_name" className="label">Full name</label>
-          <input id="customer_name" name="customer_name" required autoComplete="name" className="input" />
+          <input id="customer_name" name="customer_name" required autoComplete="name" defaultValue={defaults?.name ?? ""} className="input" />
           {fe("customer_name")}
         </div>
         <div>
           <label htmlFor="phone" className="label">Phone number</label>
-          <input id="phone" name="phone" type="tel" inputMode="tel" required autoComplete="tel" placeholder="03XXXXXXXXX" className="input" />
+          <input id="phone" name="phone" type="tel" inputMode="tel" required autoComplete="tel" placeholder="03XXXXXXXXX" defaultValue={defaults?.phone ?? ""} className="input" />
           {fe("phone")}
         </div>
         <div>
@@ -109,9 +122,35 @@ export function CheckoutForm() {
         </div>
         <div>
           <label htmlFor="city" className="label">City</label>
-          <input id="city" name="city" required autoComplete="address-level2" className="input" />
+          <input id="city" name="city" required autoComplete="address-level2" value={city} onChange={(e) => setCity(e.target.value)} className="input" />
           {fe("city")}
         </div>
+        {cityEntered && (
+          <section aria-live="polite" className="space-y-3 rounded-2xl border border-maroon-100 bg-maroon-50/50 p-4">
+            {isCod ? (
+              <>
+                <p className="font-semibold text-emerald-800">Cash on Delivery is available in {city.trim()}.</p>
+                <p className="text-sm text-ink/80">
+                  Pay {quote.ready ? formatPKR(quote.total) : "the order total"} in cash when your parcel is delivered.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold text-maroon-700">Advance payment is required for {city.trim()}.</p>
+                <p className="text-sm text-ink/80">
+                  Pay {quote.ready ? formatPKR(quote.total) : "the order total"} to any account below, then enter your transaction ID. After placing the order, send your payment screenshot to us on WhatsApp.
+                </p>
+                <PaymentDetails settings={settings} />
+                <div>
+                  <label htmlFor="payment_reference" className="label">Transaction ID / payment reference</label>
+                  <input id="payment_reference" name="payment_reference" required minLength={4} className="input" />
+                  {fe("payment_reference")}
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
         <div>
           <label htmlFor="notes" className="label">Order notes (optional)</label>
           <textarea id="notes" name="notes" rows={2} className="input" />

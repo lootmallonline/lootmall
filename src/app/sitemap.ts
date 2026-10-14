@@ -2,7 +2,6 @@ import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/site";
 import { createPublicClient } from "@/lib/supabase/public";
 
-export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const pages: MetadataRoute.Sitemap = ["", "/products", "/contact", "/privacy-policy", "/shipping-policy", "/return-policy"].map(
@@ -24,3 +23,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     return pages;
   }
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";
+export const dynamic = "force-dynamic";

@@ -77,3 +77,6 @@ export default async function AdminProducts({ searchParams }: Props) {
     </div>
   );
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";

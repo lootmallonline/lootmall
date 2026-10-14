@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Search, ShoppingBag } from "lucide-react";
+import { Search, ShoppingBag, User } from "lucide-react";
 import { useCart } from "@/components/cart/CartProvider";
 import { LOGO_SRC, SITE_NAME } from "@/lib/site";
 
@@ -44,6 +44,9 @@ export function Header({ tagline }: { tagline: string }) {
         <nav className="ml-auto flex items-center gap-1 sm:ml-0">
           <Link href="/products" className="hidden rounded-full px-3 py-2 text-sm font-medium hover:bg-maroon-50 md:block">
             All products
+          </Link>
+          <Link href="/account" className="rounded-full p-2 text-maroon-700 hover:bg-maroon-50" aria-label="My account">
+            <User size={24} />
           </Link>
           <Link
             href="/cart"

@@ -3,7 +3,6 @@ import { Mail, MessageCircle, Phone } from "lucide-react";
 import { getSettings } from "@/lib/data";
 import { whatsappUrl } from "@/lib/format";
 
-export const revalidate = 60;
 export const metadata: Metadata = { title: "Contact us", alternates: { canonical: "/contact" } };
 
 export default async function ContactPage() {
@@ -29,3 +28,6 @@ export default async function ContactPage() {
     </div>
   );
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";

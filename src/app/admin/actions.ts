@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
-import { ORDER_STATUSES } from "@/lib/types";
+import { ORDER_STATUSES, PAYMENT_STATUSES } from "@/lib/types";
+import { createServiceClient } from "@/lib/supabase/admin";
 import type { FormState } from "@/lib/admin-types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -215,6 +216,35 @@ export async function updateOrderStatusAction(id: string, _prev: FormState, fd: 
   return { ok: true };
 }
 
+export async function updatePaymentStatusAction(id: string, _prev: FormState, fd: FormData): Promise<FormState> {
+  const { supabase } = await requireAdmin();
+  const status = text(fd, "payment_status");
+  if (!UUID.test(id) || !(PAYMENT_STATUSES as readonly string[]).includes(status)) {
+    return { error: "Invalid payment status." };
+  }
+  const { error } = await supabase.from("orders").update({ payment_status: status }).eq("id", id);
+  if (error) return { error: `Could not update: ${error.message}` };
+  revalidatePath(`/admin/orders/${id}`);
+  revalidatePath("/admin/orders");
+  return { ok: true };
+}
+
+// ----------------------------------------------------------- customers
+export async function setCustomerPasswordAction(id: string, _prev: FormState, fd: FormData): Promise<FormState> {
+  await requireAdmin();
+  const password = String(fd.get("password") ?? "");
+  if (!UUID.test(id)) return { error: "Invalid customer." };
+  if (password.length < 8) return { error: "Password must be at least 8 characters." };
+  try {
+    const service = createServiceClient();
+    const { error } = await service.auth.admin.updateUserById(id, { password });
+    if (error) return { error: `Could not change the password: ${error.message}` };
+  } catch {
+    return { error: "Server is not configured to change passwords." };
+  }
+  return { ok: true };
+}
+
 // ------------------------------------------------------------ settings
 export async function saveSettingsAction(_prev: FormState, fd: FormData): Promise<FormState> {
   const { supabase } = await requireAdmin();
@@ -230,9 +260,43 @@ export async function saveSettingsAction(_prev: FormState, fd: FormData): Promis
   const tagline = text(fd, "tagline");
   if (!storeName || !tagline) return { error: "Store name and tagline cannot be empty." };
 
+  const limited = (key: string, max = 120) => text(fd, key).slice(0, max);
+  const qr = (key: string): string | null => {
+    const v = text(fd, key);
+    return v === "" || v.startsWith("https://") ? v : null;
+  };
+  const bankQr = qr("bank_qr_url");
+  const epQr = qr("easypaisa_qr_url");
+  const jcQr = qr("jazzcash_qr_url");
+  if (bankQr === null || epQr === null || jcQr === null) return { error: "A QR image link is not valid. Please upload it again." };
+
+  const codCities = text(fd, "cod_cities")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .join(", ")
+    .slice(0, 300);
+
   const { error } = await supabase
     .from("settings")
-    .update({ store_name: storeName, tagline, delivery_charge: delivery, contact_phone: phone, contact_email: email })
+    .update({
+      store_name: storeName,
+      tagline,
+      delivery_charge: delivery,
+      contact_phone: phone,
+      contact_email: email,
+      cod_cities: codCities,
+      bank_name: limited("bank_name"),
+      bank_account_title: limited("bank_account_title"),
+      bank_account_number: limited("bank_account_number", 60),
+      bank_qr_url: bankQr,
+      easypaisa_title: limited("easypaisa_title"),
+      easypaisa_number: limited("easypaisa_number", 30),
+      easypaisa_qr_url: epQr,
+      jazzcash_title: limited("jazzcash_title"),
+      jazzcash_number: limited("jazzcash_number", 30),
+      jazzcash_qr_url: jcQr,
+    })
     .eq("id", 1);
   if (error) return { error: `Could not save: ${error.message}` };
   refreshStore();

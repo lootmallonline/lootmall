@@ -6,7 +6,6 @@ import { ProductGrid } from "@/components/shop/ProductGrid";
 import { EmptyState } from "@/components/shop/EmptyState";
 import { Pagination } from "@/components/shop/Pagination";
 
-export const revalidate = 60;
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -50,3 +49,6 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     </div>
   );
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";

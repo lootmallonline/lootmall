@@ -10,7 +10,6 @@ import { AddToCartPanel } from "@/components/shop/AddToCartPanel";
 import { PriceTag } from "@/components/shop/PriceTag";
 import { ProductGrid } from "@/components/shop/ProductGrid";
 
-export const revalidate = 60;
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -110,3 +109,6 @@ export default async function ProductPage({ params }: Props) {
     </div>
   );
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";

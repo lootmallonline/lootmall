@@ -13,3 +13,6 @@ export default async function NewBanner() {
     </div>
   );
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";

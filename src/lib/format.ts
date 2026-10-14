@@ -25,3 +25,16 @@ export function whatsappUrl(phone: string, message?: string): string {
   const base = `https://wa.me/${whatsappNumber(phone)}`;
   return message ? `${base}?text=${encodeURIComponent(message)}` : base;
 }
+
+/**
+ * Turns any common Pakistani mobile format into 03XXXXXXXXX.
+ * Returns null when the number is not a valid mobile number.
+ */
+export function toLocalPhone(input: string): string | null {
+  const digits = input.replace(/\D/g, "");
+  let local = "";
+  if (digits.length === 12 && digits.startsWith("92")) local = "0" + digits.slice(2);
+  else if (digits.length === 11 && digits.startsWith("0")) local = digits;
+  else if (digits.length === 10 && digits.startsWith("3")) local = "0" + digits;
+  return /^03\d{9}$/.test(local) ? local : null;
+}

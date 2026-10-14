@@ -2,9 +2,8 @@ import { ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/types";
 
 const STYLES: Record<OrderStatus, string> = {
   pending: "bg-amber-100 text-amber-900",
-  confirmed: "bg-sky-100 text-sky-900",
-  ready_to_ship: "bg-indigo-100 text-indigo-900",
-  shipped: "bg-purple-100 text-purple-900",
+  packed: "bg-indigo-100 text-indigo-900",
+  dispatched: "bg-purple-100 text-purple-900",
   delivered: "bg-emerald-100 text-emerald-900",
   cancelled: "bg-red-100 text-red-900",
 };

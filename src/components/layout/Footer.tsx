@@ -7,6 +7,8 @@ const links = [
   { href: "/privacy-policy", label: "Privacy Policy" },
   { href: "/shipping-policy", label: "Shipping Policy" },
   { href: "/return-policy", label: "Return Policy" },
+  { href: "/track", label: "Track your order" },
+  { href: "/account", label: "My account" },
   { href: "/contact", label: "Contact" },
 ];
 

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { PolicyPage } from "@/components/shop/PolicyPage";
 import { getSettings } from "@/lib/data";
 
-export const revalidate = 60;
 export const metadata: Metadata = { title: "Return Policy", alternates: { canonical: "/return-policy" } };
 
 export default async function Page() {
@@ -19,3 +18,6 @@ export default async function Page() {
     />
   );
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";

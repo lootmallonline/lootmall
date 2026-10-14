@@ -11,6 +11,17 @@ export const DEFAULT_SETTINGS: Settings = {
   delivery_charge: 299,
   contact_phone: "03129585407",
   contact_email: "lootmall.online@gmail.com",
+  cod_cities: "Rawalpindi, Islamabad",
+  bank_name: "",
+  bank_account_title: "",
+  bank_account_number: "",
+  bank_qr_url: "",
+  easypaisa_title: "",
+  easypaisa_number: "",
+  easypaisa_qr_url: "",
+  jazzcash_title: "",
+  jazzcash_number: "",
+  jazzcash_qr_url: "",
 };
 
 export const getSettings = cache(async (): Promise<Settings> => {

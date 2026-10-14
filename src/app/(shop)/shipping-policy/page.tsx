@@ -3,7 +3,6 @@ import { PolicyPage } from "@/components/shop/PolicyPage";
 import { getSettings } from "@/lib/data";
 import { formatPKR } from "@/lib/format";
 
-export const revalidate = 60;
 export const metadata: Metadata = { title: "Shipping Policy", alternates: { canonical: "/shipping-policy" } };
 
 export default async function Page() {
@@ -21,3 +20,6 @@ export default async function Page() {
     />
   );
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";

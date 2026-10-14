@@ -7,7 +7,6 @@ import { CategoryTiles } from "@/components/shop/CategoryTiles";
 import { ProductGrid } from "@/components/shop/ProductGrid";
 import { EmptyState } from "@/components/shop/EmptyState";
 
-export const revalidate = 60;
 
 export default async function HomePage() {
   const [settings, categories, heroBanners, promoBanners, featured, latest] = await Promise.all([
@@ -125,3 +124,6 @@ export default async function HomePage() {
     </div>
   );
 }
+
+// Cloudflare Pages runs these routes on the Edge runtime.
+export const runtime = "edge";
