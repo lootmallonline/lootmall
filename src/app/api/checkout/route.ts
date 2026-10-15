@@ -64,23 +64,32 @@ export async function POST(req: Request) {
   }
   if (items.length < 1 || items.length > 50) return fail("Your cart is empty.", 422);
 
-  const { url, key } = getSupabaseServiceEnvironment();
-  if (!url || !key) {
-    console.error("checkout: Supabase environment variables are missing");
-    return fail("We could not place your order. Please try again or contact us on WhatsApp. (Code: CONFIG)", 500);
-  }
-
+  let stage = "supabase_environment";
   try {
+    const { url, key } = getSupabaseServiceEnvironment();
+    const missingVariables = [
+      !url ? "NEXT_PUBLIC_SUPABASE_URL" : null,
+      !key ? "SUPABASE_SERVICE_ROLE_KEY" : null,
+    ].filter((name): name is string => name !== null);
+    if (missingVariables.length > 0) {
+      console.error("checkout: required Supabase runtime bindings are missing", { missingVariables });
+      return fail("We could not place your order. Please try again or contact us on WhatsApp. (Code: CONFIG)", 500);
+    }
+
+    stage = "create_service_client";
     const service = createServiceClient(url, key);
     let customerId: string | null = null;
     if (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      stage = "customer_session_lookup";
       try {
         const {
           data: { user },
         } = await (await createServerSupabase()).auth.getUser();
         customerId = user?.id ?? null;
       } catch (error) {
-        console.error("checkout: customer session lookup failed", error);
+        console.error("checkout: customer session lookup failed", {
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        });
       }
     }
 
@@ -95,10 +104,12 @@ export async function POST(req: Request) {
       p_customer_id: customerId,
       p_payment_reference: reference,
     };
+    stage = "create_order_rpc";
     let { data, error } = await service.rpc("create_order", params);
 
     // Older databases have neither customer_id nor payment_reference parameters.
     if (error?.code === "PGRST202") {
+      console.warn("checkout: retrying legacy create_order signature", { code: error.code });
       ({ data, error } = await service.rpc("create_order", {
         p_customer_name: name,
         p_phone: phone,
@@ -110,16 +121,19 @@ export async function POST(req: Request) {
     }
 
     if (error) {
+      const code = error.code || "UNKNOWN";
+      console.error("checkout: create_order RPC failed", { code });
       const message = error.message;
       if (FRIENDLY.test(message)) return fail(message, 409);
-      const code = error.code || "UNKNOWN";
-      console.error("create_order failed:", code, message);
       return fail(`We could not place your order. Please try again or contact us on WhatsApp. (Code: ${code})`, 500);
     }
 
     const row = (Array.isArray(data) ? data[0] : data) as Json | null;
     const orderNumber = row && typeof row.out_order_number === "string" ? row.out_order_number : "";
-    if (!orderNumber) return fail("We could not place your order. Please try again. (Code: EMPTY)", 500);
+    if (!orderNumber) {
+      console.error("checkout: create_order RPC returned no order number");
+      return fail("We could not place your order. Please try again. (Code: EMPTY)", 500);
+    }
 
     return NextResponse.json({
       order_number: orderNumber,
@@ -127,7 +141,10 @@ export async function POST(req: Request) {
       payment_method: row?.out_payment_method ?? null,
     });
   } catch (e) {
-    console.error("checkout error:", e);
+    console.error("checkout: request failed", {
+      stage,
+      errorName: e instanceof Error ? e.name : "UnknownError",
+    });
     return fail("We could not place your order. Please try again or contact us on WhatsApp. (Code: SERVER)", 500);
   }
 }
