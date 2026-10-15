@@ -22,6 +22,3 @@ export default async function PanelLayout({ children }: { children: React.ReactN
     </div>
   );
 }
-
-// Cloudflare Pages runs these routes on the Edge runtime.
-export const runtime = "edge";

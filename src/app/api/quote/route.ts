@@ -36,6 +36,4 @@ export async function POST(req: Request) {
   );
 }
 
-// Cloudflare Pages runs these routes on the Edge runtime.
-export const runtime = "edge";
 export const dynamic = "force-dynamic";

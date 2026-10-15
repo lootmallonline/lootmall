@@ -28,6 +28,3 @@ export default async function ContactPage() {
     </div>
   );
 }
-
-// Cloudflare Pages runs these routes on the Edge runtime.
-export const runtime = "edge";
