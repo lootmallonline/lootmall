@@ -1,8 +1,8 @@
-# LootMall — Online Store (Next.js + Supabase + Cloudflare Pages)
+# LootMall — Online Store (Next.js + Supabase + Cloudflare Workers)
 
 Ye guide beginner ke liye hai (Roman Urdu). Har step order mein follow karein.
 
-> **Sach pehle:** Is project ko mere environment mein install/build karke chalaya nahi ja saka (internet band hai). Is liye pehli deploy par koi chhota error aa sakta hai. Cloudflare ke "Build log" ka aakhri hissa bhej dein, theek ho jayega. Detail neeche "Kya test hua, kya nahi".
+> **Sach pehle:** Cloudflare Worker production bundle and checkout smoke tests were run for this update. A live Supabase order and Cloudflare upload still need verification in the deployment environment; details are below.
 
 ---
 
@@ -13,18 +13,13 @@ Ye guide beginner ke liye hai (Roman Urdu). Har step order mein follow karein.
 3. **Admin → Customers:** registered customers aur guest (direct) checkouts ki ginti, customer list, aur password reset.
 4. **Packing label aur invoice:** Admin → Orders → order kholen → **Print Packing Label** (4×6 in thermal ya 3×7 in) ya **Print Invoice** (A4). Label par logo/naam, support phone, order ID + barcode, customer ki details, items, aur COD amount hota hai.
 5. **City ke hisab se payment:** **Rawalpindi / Islamabad** mein **Cash on Delivery**. **Baqi cities** mein **Advance Payment** (Bank / EasyPaisa / JazzCash ki details aur QR checkout par dikhte hain). Ye details aur COD cities ki list **Admin → Settings** se badalti hain.
-6. **Cloudflare Pages ke liye:** tamam routes ab **Edge runtime** par hain.
+6. **Cloudflare Workers ke liye:** tamam routes ab **Edge runtime** par hain.
 
 ---
 
-## Aap ka maujooda masla: "We could not place your order"
+## Checkout configuration
 
-Is ki 2 wajahein ho sakti hain, dono ab theek ki gayi hain:
-
-1. **Node.js route Cloudflare par nahi chalta.** Pehle `/api/checkout` Node.js runtime par tha. Ab Edge par hai.
-2. **Cloudflare mein `SUPABASE_SERVICE_ROLE_KEY` na hona.** Order banane ke liye ye key zaroori hai. Error ke aakhir mein `(Code: CONFIG)` aaye to yahi wajah hai. Cloudflare Pages → Settings → **Variables and Secrets** mein check karein, aur **Production aur Preview dono** mein daalein. Variable badalne ke baad **naya deploy** zaroori hai (purani deploy nayi value nahi uthati).
-
-Agar code `(Code: PGRST202)` ya `42883` aaye, to database ka naya function nahi bana: neeche "Upgrade" ka SQL step karein.
+`POST /api/checkout` validates customer details and cart IDs/quantities, then invokes the database `create_order()` function through the Supabase service client. The database—not the browser—checks active products and stock, calculates prices and delivery, and inserts the order and its line items atomically. The service-role key is required at runtime; configure it as a secret in the Cloudflare Worker. Missing configuration is reported as `(Code: CONFIG)` and database errors include a code in the response and server logs.
 
 ---
 
@@ -34,7 +29,7 @@ Agar code `(Code: PGRST202)` ya `42883` aaye, to database ka naya function nahi 
 
 1. Supabase → **SQL Editor → New query**.
 2. File **`supabase/upgrade-v2.sql`** ka poora text paste karke **Run**. "Success" aana chahiye. (Purane orders ki status khud naye naam mein badal jati hain: Confirmed → Pending, Ready to Ship → Packed, Shipped → Dispatched.)
-3. Phir naya code GitHub par upload karein (neeche Step 2) aur Cloudflare par deploy karein.
+3. Deploy the code only after the SQL migration succeeds.
 
 **Naya (khali) database hai?** To sirf **`supabase/schema.sql`** chalayen (isme v2 shamil hai). `upgrade-v2.sql` na chalayen.
 
@@ -67,14 +62,11 @@ Agar code `(Code: PGRST202)` ya `42883` aaye, to database ka naya function nahi 
 
 ---
 
-## STEP 3 — Cloudflare Pages par deploy
+## STEP 3 — Cloudflare Workers par deploy
 
-1. dash.cloudflare.com → **Workers & Pages → Create → Pages → Connect to Git** → `lootmall` repository.
-2. Build settings:
-   - **Framework preset:** Next.js
-   - **Build command:** `npx @cloudflare/next-on-pages@1`
-   - **Build output directory:** `.vercel/output/static`
-3. **Environment variables** (Production **aur** Preview) add karein:
+1. dash.cloudflare.com → **Workers & Pages → Create → Workers → Connect to Git** → `lootmall` repository.
+2. Set the deployment command to `npm run deploy`. The OpenNext Cloudflare adapter builds the Worker and Wrangler deploys it using `wrangler.jsonc`. The compatibility date and `nodejs_compat` flag are already set there. Use `npm run cf:build` to build without deploying.
+3. **Worker environment variables** add karein:
 
    | Name | Value |
    |---|---|
@@ -82,15 +74,13 @@ Agar code `(Code: PGRST202)` ya `42883` aaye, to database ka naya function nahi 
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key |
    | `SUPABASE_SERVICE_ROLE_KEY` | service_role key (**Secret** type) |
    | `NEXT_PUBLIC_SITE_URL` | `https://lootmall.online` |
-   | `NODE_VERSION` | `20` |
 
-4. **Settings → Functions (Runtime) → Compatibility flags:** `nodejs_compat` add karein (Production aur Preview dono). Compatibility date `2024-09-23` ya us se nayi.
-5. **Save and Deploy**. Variable ya flag badalne ke baad hamesha **Retry deployment** / naya commit karein.
-6. Cloudflare ka `.pages.dev` link kholen aur neeche ki testing checklist chalayen.
+   Set the three `NEXT_PUBLIC_*` values as build variables (they are public and included in the site bundle) and as Worker variables for server requests. Store `SUPABASE_SERVICE_ROLE_KEY` only as a Worker secret; never add it as a build variable. Configure runtime values in each Worker environment you deploy.
+4. Deploy and test the `workers.dev` URL before attaching any custom domain.
 
-> Cloudflare Pages par **ISR / revalidate** support nahi hota, is liye saare pages har request par taaza data lete hain. Aap Admin se kuch badlein to foran nazar aata hai.
+> Existing Supabase projects must run `supabase/upgrade-v2.sql` before deployment; new projects should use `supabase/schema.sql`. Cloudflare Pages `next-on-pages` is no longer the production target: this project uses the OpenNext Cloudflare Workers adapter. Do not change DNS until the Worker deployment has been verified.
 
-Domain: `lootmall.online` ko apne maujooda Cloudflare account mein Pages project ke **Custom domains** se jorein. Jab tak naya store test na ho jaye, purani site wale records na hatayen.
+After the Worker is verified, attach a custom domain from the Worker settings. Do not alter the existing DNS records until you are ready to switch production traffic.
 
 (Netlify par bhi ye project chal sakta hai, `netlify.toml` maujood hai.)
 
@@ -126,11 +116,12 @@ Domain: `lootmall.online` ko apne maujooda Cloudflare account mein Pages project
 
 ## Kya test hua, kya nahi (sach)
 
-- **Nahi chalaya gaya:** `npm install`, `npm run build`, poora TypeScript check, Cloudflare `next-on-pages` build, aur live Supabase. Mere environment mein internet band hai.
-- **Chalaya gaya:** syntax check (0 errors), 222 imports/exports ka check, barcode table ke structural checks (har pattern ka jama 11, bar widths even, sab unique).
+- **Passed:** `npm run typecheck`, `npm run cf:build` (Next.js production compile plus OpenNext Worker bundle), and local checkout API smoke tests for malformed JSON (400), invalid fields (422), missing secrets (CONFIG), and a successful mocked `create_order` RPC response. The RPC mock verified that the browser-controlled payload contains only product IDs and quantities.
+- **Not run:** a live Supabase order, or an actual Cloudflare upload. The local mock does not replace testing against the deployed database. `npm run deploy` built the Worker but Wrangler upload stopped because this environment has no `CLOUDFLARE_API_TOKEN`.
+- **Windows note:** OpenNext warns that Windows is not fully supported; the Worker bundle completed here, but production should also be verified in Cloudflare or a Linux/WSL build environment.
+- **Security note:** `npm audit --omit=dev` reports 2 advisories (one moderate, one high) through Next.js's PostCSS dependency. The suggested automatic fix requires upgrading Next.js to v16, a breaking change not included here.
+- **Cloudflare Workers:** before attaching a domain, configure the public build variables, Worker variables and secret above, run the Supabase schema upgrade when applicable, deploy, then test a real order.
 - **Barcode:** Code 128 apni hi encoder se banta hai. Maine kisi asli scanner se scan nahi kiya. Pehle 2–3 labels print karke apne phone/scanner se test karein.
-- **next-on-pages:** ye Cloudflare ka tool hai. Is ka Next.js 15.5 ke saath chalna maine verify nahi kiya. Build fail ho to log bhej dein.
-- **Edge limit:** Cloudflare ki free plan par worker size ki limit hoti hai. Agar "script too large" aaye to mujhe bata dein.
 
 ## Mehdood cheezein (jaan bujh kar / abhi nahi)
 
@@ -142,7 +133,7 @@ Domain: `lootmall.online` ko apne maujooda Cloudflare account mein Pages project
 
 ## Technical notes
 
-- Next.js 15 App Router, Tailwind 3, Supabase. Tamam pages/layouts/route handlers par `export const runtime = "edge"` aur dynamic rendering. Middleware sirf `/admin`, `/account`, `/checkout` par chalta hai.
+- Next.js 15 App Router, Tailwind 3, Supabase. Cloudflare deployment uses OpenNext on Workers (`wrangler.jsonc`) with `nodejs_compat`; routes use dynamic rendering. Middleware sirf `/admin`, `/account`, `/checkout` par chalta hai.
 - Order creation: `POST /api/checkout` → zod validation → Postgres function `create_order()` (service role). Ye price, stock, delivery charge, COD/advance (city se) aur advance mein transaction ID ki shart khud lagata hai.
 - Status rules aur auto-restock database triggers mein hain (`orders_before_update`, `orders_after_change`), is liye admin ke ilawa kisi raste se bhi bypass nahi hote.
 - RLS: customers sirf apne orders / items / history parh sakte hain (`customer_id = auth.uid()`). Admin sab. Public sirf active products, banners, categories, settings.

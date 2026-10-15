@@ -18,6 +18,3 @@ export default async function LoginPage({ searchParams }: Props) {
     </div>
   );
 }
-
-// Cloudflare Pages runs these routes on the Edge runtime.
-export const runtime = "edge";

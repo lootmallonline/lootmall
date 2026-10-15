@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
-import { SITE_NAME, SITE_URL } from "@/lib/site";
+import { SITE_NAME, SITE_URL } from "../lib/site";
 
 const sans = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 const display = Fraunces({ subsets: ["latin"], variable: "--font-display", display: "swap" });
@@ -24,6 +24,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   );
 }
 
-// Cloudflare Pages runs these routes on the Edge runtime.
-export const runtime = "edge";
 export const dynamic = "force-dynamic";

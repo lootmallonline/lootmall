@@ -125,6 +125,3 @@ html, body { background: #fff; }
     </div>
   );
 }
-
-// Cloudflare Pages runs these routes on the Edge runtime.
-export const runtime = "edge";

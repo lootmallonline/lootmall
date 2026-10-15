@@ -15,6 +15,3 @@ export default async function NewProduct() {
     </div>
   );
 }
-
-// Cloudflare Pages runs these routes on the Edge runtime.
-export const runtime = "edge";
