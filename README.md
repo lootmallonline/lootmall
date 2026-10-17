@@ -2,7 +2,11 @@
 
 Ye guide beginner ke liye hai (Roman Urdu). Har step order mein follow karein.
 
-> **Sach pehle:** Is project ko mere environment mein install/build karke chalaya nahi ja saka (internet band hai). Is liye pehli deploy par koi chhota error aa sakta hai. Cloudflare ke "Build log" ka aakhri hissa bhej dein, theek ho jayega. Detail neeche "Kya test hua, kya nahi".
+> **Sach pehle:** Is project ko mere environment mein `npm install` / `npm run build` karke chalaya **nahi** ja saka (npm registry wahan band thi). Maine TypeScript type-check (strict) aur routes/imports/barcode ke checks chalaye, jo sab pass hue. Lekin asli build pehli dafa **Cloudflare par** hogi. Agar koi error aaye to Cloudflare ke "Build log" ka aakhri hissa bhej dein.
+
+## Agar Cloudflare build fail ho (jaise "Module not found: @/lib/...")
+
+Iska matlab hai ke GitHub par `src/lib` ki files poori nahi pohanchin. Is zip ka **poora** `src` folder (khaas kar `src/lib/` aur `src/lib/supabase/`) GitHub par dobara upload karein. Agar GitHub par purani `bun.lock` ya `package-lock.json` hai to unhein delete kar dein, taake nayi `package.json` ke hisab se install ho.
 
 ---
 
@@ -126,11 +130,11 @@ Domain: `lootmall.online` ko apne maujooda Cloudflare account mein Pages project
 
 ## Kya test hua, kya nahi (sach)
 
-- **Nahi chalaya gaya:** `npm install`, `npm run build`, poora TypeScript check, Cloudflare `next-on-pages` build, aur live Supabase. Mere environment mein internet band hai.
-- **Chalaya gaya:** syntax check (0 errors), 222 imports/exports ka check, barcode table ke structural checks (har pattern ka jama 11, bar widths even, sab unique).
-- **Barcode:** Code 128 apni hi encoder se banta hai. Maine kisi asli scanner se scan nahi kiya. Pehle 2–3 labels print karke apne phone/scanner se test karein.
+- **Nahi chalaya gaya:** `npm install`, `npm run build`, Cloudflare `next-on-pages` build, aur live Supabase. Mere environment mein npm registry band thi.
+- **Chalaya gaya:** poore project ka strict TypeScript check (external packages ke liye shim ke saath), har page/route par `runtime = "edge"` ka check, client components mein server-only imports ka check, "use server" files ka check, aur barcode table ke checks (har pattern ka jama 11, stop ka 13, sab unique, aur encode/decode round-trip).
+- **Barcode:** Code 128 apni hi encoder se banta hai. Kisi asli scanner se scan nahi kiya. Pehle 2 se 3 labels print karke apne phone/scanner se test karein.
 - **next-on-pages:** ye Cloudflare ka tool hai. Is ka Next.js 15.5 ke saath chalna maine verify nahi kiya. Build fail ho to log bhej dein.
-- **Edge limit:** Cloudflare ki free plan par worker size ki limit hoti hai. Agar "script too large" aaye to mujhe bata dein.
+- **Edge limit:** Cloudflare ki free plan par worker size ki limit hoti hai. Agar "script too large" aaye to bata dein.
 
 ## Mehdood cheezein (jaan bujh kar / abhi nahi)
 
