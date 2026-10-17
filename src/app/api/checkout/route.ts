@@ -30,7 +30,7 @@ function fail(error: string, code: string, status: number) {
   return NextResponse.json({ ok: false, error, code }, { status });
 }
 
-export async function POST(request: Request) {
+async function handle(request: Request): Promise<Response> {
   let body: unknown;
   try {
     body = await request.json();
@@ -107,4 +107,30 @@ export async function POST(request: Request) {
     total: row.out_total as number,
     payment_method: (row.out_payment_method as string) ?? "cod",
   });
+}
+
+// Same route, but it can never crash silently: any unexpected error comes back as
+// readable JSON with a short code, and is written to the Cloudflare logs.
+export async function POST(request: Request) {
+  try {
+    return await handle(request);
+  } catch (e) {
+    console.error("checkout crashed:", e);
+    const name = e instanceof Error ? e.name : "UNKNOWN";
+    return fail("We could not place your order right now. Please try again or contact us on WhatsApp.", `EXC-${name}`, 500);
+  }
+}
+
+// Open /api/checkout in a browser to check that this route runs.
+// It shows only true/false for the two server settings, never their values.
+export async function GET() {
+  return NextResponse.json(
+    {
+      ok: true,
+      service: "lootmall-checkout",
+      supabase_url: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      service_role_key: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
